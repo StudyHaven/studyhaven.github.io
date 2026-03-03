@@ -6,7 +6,7 @@ import {
   collection, addDoc, getDocs, deleteDoc,
   query, orderBy
 } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-firestore.js";
-import { getMessaging, getToken, onMessage } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-messaging.js";
+import { getMessaging, getToken, onMessage, isSupported } from "https://www.gstatic.com/firebasejs/10.6.0/firebase-messaging.js";
 
 // ── FCM VAPID key ──
 const FCM_VAPID_KEY = "BIsaiVaW0Mj5TDpRL7wkxYIUEGn9_KPiogUeREeUGbbDgcFxXI8gw-1seOKLYNUE2qlqzhyXNz5Er1yDc6SvkOA";
@@ -23,8 +23,45 @@ const firebaseConfig = {
 const app       = initializeApp(firebaseConfig);
 const auth      = getAuth(app);
 const db        = getFirestore(app);
-const messaging = getMessaging(app);
+let messaging = null;
+let messagingInitialized = false;
+let messagingListenerBound = false;
 let currentUser = null;
+
+async function initMessagingIfSupported() {
+  if (messagingInitialized) return messaging;
+  messagingInitialized = true;
+
+  try {
+    const supported = await isSupported();
+    if (!supported) return null;
+    messaging = getMessaging(app);
+    return messaging;
+  } catch (error) {
+    console.warn("StudyHaven: Messaging unavailable in this environment:", error?.message || error);
+    messaging = null;
+    return null;
+  }
+}
+
+async function bindForegroundMessagingListener() {
+  if (messagingListenerBound) return;
+  const m = await initMessagingIfSupported();
+  if (!m) return;
+
+  onMessage(m, payload => {
+    const n = payload.notification || {};
+    const d = payload.data || {};
+    showAlarmNotification({
+      title:        n.body  || d.body  || "StudyHaven Reminder",
+      subtitle:     d.subtitle || "",
+      emailSubject: d.emailSubject || "StudyHaven Reminder",
+      emailBody:    d.emailBody   || n.body || "",
+    });
+  });
+
+  messagingListenerBound = true;
+}
 
 // ── Helpers ──
 const $ = id => document.getElementById(id);
@@ -101,6 +138,7 @@ onAuthStateChanged(auth, user => {
   $("dash-username").textContent = user.displayName || user.email.split("@")[0];
   loadTasks();
   loadAllLogs();
+  bindForegroundMessagingListener();
   registerFCMToken();
   recoverTimerSession();
   initializeGradioChat();
@@ -121,6 +159,8 @@ $("tracker-today").textContent  = new Date().toLocaleDateString([], { weekday:"l
 // ════════════════════════════
 async function registerFCMToken() {
   if (!("serviceWorker" in navigator) || !("Notification" in window)) return;
+  const m = await initMessagingIfSupported();
+  if (!m) return;
   if (FCM_VAPID_KEY === "YOUR_VAPID_KEY_HERE") {
     console.warn("StudyHaven: Replace FCM_VAPID_KEY with your real VAPID key to enable push notifications.");
     return;
@@ -135,15 +175,15 @@ async function registerFCMToken() {
       showToast("To enable: click the 🔒 lock in your address bar → Notifications → Allow, then refresh.", "error");
     }, { once: true });
   } else if (Notification.permission === "granted") {
-    const ok = await _doRegisterToken(btn, true);
+    const ok = await _doRegisterToken(btn, true, m);
     if (!ok) btn.style.display = "flex";
   } else {
     btn.style.display = "flex";
-    btn.addEventListener("click", () => _doRegisterToken(btn, false), { once: true });
+    btn.addEventListener("click", () => _doRegisterToken(btn, false, m), { once: true });
   }
 }
 
-async function _doRegisterToken(btn, silent) {
+async function _doRegisterToken(btn, silent, activeMessaging) {
   const bellIcon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/></svg>`;
   if (btn && !silent) { btn.innerHTML = `${bellIcon}<span class="notif-text">Enabling...</span>`; }
   try {
@@ -168,7 +208,7 @@ async function _doRegisterToken(btn, silent) {
       });
     });
 
-    const token = await getToken(messaging, {
+    const token = await getToken(activeMessaging, {
       vapidKey: FCM_VAPID_KEY,
       serviceWorkerRegistration: swReg,
     });
@@ -217,24 +257,13 @@ async function _doRegisterToken(btn, silent) {
       btn.style.display = "flex";
       btn.innerHTML = `${bellIcon}<span class="notif-text">Enable Notifications</span>`;
       btn.title = userMsg;
-      btn.onclick = () => _doRegisterToken(btn, false);
+      btn.onclick = () => _doRegisterToken(btn, false, activeMessaging);
     }
     console.warn("StudyHaven: FCM registration failed:", err.message);
     if (!silent) showToast(userMsg, "error");
     return false;
   }
 }
-
-onMessage(messaging, payload => {
-  const n = payload.notification || {};
-  const d = payload.data || {};
-  showAlarmNotification({
-    title:        n.body  || d.body  || "StudyHaven Reminder",
-    subtitle:     d.subtitle || "",
-    emailSubject: d.emailSubject || "StudyHaven Reminder",
-    emailBody:    d.emailBody   || n.body || "",
-  });
-});
 
 // ════════════════════════════
 //  TAB SWITCHING
