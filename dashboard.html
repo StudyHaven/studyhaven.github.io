@@ -483,12 +483,15 @@ img { display: block; max-width: 100%; }
 .voice-toggle input[type="radio"]:checked + label { background:white; color:var(--sage); box-shadow:0 1px 4px rgba(147,51,234,0.18); }
 #voice-toggle-wrap { display:none; }
 #voice-toggle-wrap.visible { display:flex; }
+#btn-voice-cycle { display:none; }
 @media(max-width:500px){
   .companion-avatar { width:32px; height:32px; }
   .companion-avatar svg { width:18px; height:18px; }
   .companion-status-text { display:none; }
   .tts-label { display:none; }
   .clear-label { display:none; }
+  #voice-toggle-wrap.visible { display:none; }
+  #btn-voice-cycle.visible { display:flex !important; }
 }
 
 /* ── Repeat alarm toggle ── */
@@ -632,6 +635,16 @@ img { display: block; max-width: 100%; }
               <input type="radio" name="tts-voice" id="voice-male" value="male" />
               <label for="voice-male">👨 Male</label>
             </div>
+            <button
+              id="btn-voice-cycle"
+              title="Switch voice"
+              style="
+                all:unset; cursor:pointer; display:none; align-items:center; gap:.3rem;
+                font-family:'DM Sans',sans-serif; font-size:.75rem; font-weight:500;
+                color:var(--muted); padding:.35rem .75rem;
+                border:1px solid #e2e2e2; border-radius:var(--radius-pill);
+                background:white; transition:all .2s ease; flex-shrink:0; min-width:0;
+              ">👩 Female</button>
             <!-- Clear Chat -->
             <button
               id="btn-chat-clear"

@@ -291,6 +291,27 @@ function getSelectedVoice() {
   return el ? el.value : "female";
 }
 
+function updateMobileVoiceButton() {
+  const btn = $("btn-voice-cycle");
+  if (!btn) return;
+  const selectedVoice = getSelectedVoice();
+  btn.textContent = selectedVoice === "male" ? "👨 Male" : "👩 Female";
+}
+
+function toggleVoiceSelection() {
+  const female = $("voice-female");
+  const male = $("voice-male");
+  if (!female || !male) return;
+
+  if (male.checked) {
+    female.checked = true;
+  } else {
+    male.checked = true;
+  }
+
+  updateMobileVoiceButton();
+}
+
 // ── Server-side TTS via Kokoro ──
 async function speakWithServer(text) {
   try {
@@ -426,7 +447,10 @@ function updateTTSButton() {
   const btn = $("btn-tts-toggle");
   if (!btn) return;
   const voiceWrap = document.getElementById("voice-toggle-wrap");
+  const mobileVoiceBtn = $("btn-voice-cycle");
   if (voiceWrap) voiceWrap.classList.toggle("visible", ttsEnabled);
+  if (mobileVoiceBtn) mobileVoiceBtn.classList.toggle("visible", ttsEnabled);
+  updateMobileVoiceButton();
 
   if (ttsEnabled) {
     btn.title = "Text-to-speech ON — click to turn off";
@@ -579,6 +603,7 @@ async function clearChatHistory() {
 async function initializeGradioChat() {
   await loadChatHistoryFromFirebase();
   renderChatHistoryUI();
+  updateMobileVoiceButton();
 
   // Wire up buttons with robust attachment - use addEventListener only
   const attachButtonListeners = () => {
@@ -602,8 +627,26 @@ async function initializeGradioChat() {
       console.log("✓ TTS button listener attached");
     }
 
+    const voiceCycleBtn = $("btn-voice-cycle");
+    if (voiceCycleBtn && !voiceCycleBtn._hasListener) {
+      voiceCycleBtn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleVoiceSelection();
+      });
+      voiceCycleBtn._hasListener = true;
+      console.log("✓ Mobile voice button listener attached");
+    }
+
+    const voiceInputs = document.querySelectorAll('input[name="tts-voice"]');
+    voiceInputs.forEach((inputEl) => {
+      if (inputEl._hasListener) return;
+      inputEl.addEventListener("change", updateMobileVoiceButton);
+      inputEl._hasListener = true;
+    });
+
     // Retry if buttons not found
-    if (!clearBtn || !ttsBtn) {
+    if (!clearBtn || !ttsBtn || !voiceCycleBtn) {
       console.log("⏳ Buttons not ready, retrying in 500ms...");
       setTimeout(attachButtonListeners, 500);
       return;
